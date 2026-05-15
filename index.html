@@ -1,0 +1,409 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Retro Space Invaders TV Edition</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #050510;
+      overflow: hidden;
+      font-family: monospace;
+      color: white;
+    }canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  image-rendering: pixelated;
+  background: radial-gradient(circle at center, #101030 0%, #050510 70%);
+}
+
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    const GAME_WIDTH = 960;
+    const GAME_HEIGHT = 540;
+
+    let scaleX = 1;
+    let scaleY = 1;
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      scaleX = canvas.width / GAME_WIDTH;
+      scaleY = canvas.height / GAME_HEIGHT;
+      ctx.setTransform(scaleX, 0, 0, scaleY, 0, 0);
+    }
+
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    const keys = {};
+    window.addEventListener("keydown", (e) => {
+      keys[e.code] = true;
+      if (["ArrowLeft", "ArrowRight", "Space", "Enter"].includes(e.code)) {
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      keys[e.code] = false;
+    });
+
+    const player = {
+      x: GAME_WIDTH / 2 - 22,
+      y: GAME_HEIGHT - 70,
+      w: 44,
+      h: 24,
+      speed: 360,
+      cooldown: 0
+    };
+
+    let bullets = [];
+    let enemyBullets = [];
+    let enemies = [];
+    let particles = [];
+    let stars = [];
+
+    let score = 0;
+    let lives = 3;
+    let level = 1;
+    let enemyDirection = 1;
+    let enemyStepTimer = 0;
+    let gameState = "title";
+    let highScore = Number(localStorage.getItem("retroHighScore") || 0);
+
+    function createStars() {
+      stars = [];
+      for (let i = 0; i < 90; i++) {
+        stars.push({
+          x: Math.random() * GAME_WIDTH,
+          y: Math.random() * GAME_HEIGHT,
+          size: Math.random() > 0.8 ? 2 : 1,
+          speed: 15 + Math.random() * 45
+        });
+      }
+    }
+
+    function createEnemies() {
+      enemies = [];
+      const rows = Math.min(4 + level, 7);
+      const cols = 10;
+      const startX = 145;
+      const startY = 80;
+      const gapX = 66;
+      const gapY = 42;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          enemies.push({
+            x: startX + c * gapX,
+            y: startY + r * gapY,
+            w: 34,
+            h: 24,
+            alive: true,
+            type: r % 3
+          });
+        }
+      }
+    }
+
+    function resetGame() {
+      score = 0;
+      lives = 3;
+      level = 1;
+      bullets = [];
+      enemyBullets = [];
+      particles = [];
+      player.x = GAME_WIDTH / 2 - player.w / 2;
+      player.cooldown = 0;
+      enemyDirection = 1;
+      createEnemies();
+      gameState = "playing";
+    }
+
+    function nextLevel() {
+      level++;
+      bullets = [];
+      enemyBullets = [];
+      player.x = GAME_WIDTH / 2 - player.w / 2;
+      enemyDirection = 1;
+      createEnemies();
+    }
+
+    function shoot() {
+      if (player.cooldown <= 0) {
+        bullets.push({
+          x: player.x + player.w / 2 - 3,
+          y: player.y - 12,
+          w: 6,
+          h: 14,
+          speed: 520
+        });
+        player.cooldown = 0.28;
+      }
+    }
+
+    function enemyShoot() {
+      const alive = enemies.filter(e => e.alive);
+      if (!alive.length) return;
+      const shooter = alive[Math.floor(Math.random() * alive.length)];
+      enemyBullets.push({
+        x: shooter.x + shooter.w / 2 - 3,
+        y: shooter.y + shooter.h,
+        w: 6,
+        h: 14,
+        speed: 190 + level * 18
+      });
+    }
+
+    function addExplosion(x, y, color) {
+      for (let i = 0; i < 14; i++) {
+        particles.push({
+          x,
+          y,
+          vx: (Math.random() - 0.5) * 190,
+          vy: (Math.random() - 0.5) * 190,
+          life: 0.45 + Math.random() * 0.3,
+          color
+        });
+      }
+    }
+
+    function rectsOverlap(a, b) {
+      return a.x < b.x + b.w &&
+             a.x + a.w > b.x &&
+             a.y < b.y + b.h &&
+             a.y + a.h > b.y;
+    }
+
+    function getGamepadInput() {
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      const pad = pads[0];
+      if (!pad) return { left: false, right: false, fire: false, start: false };
+
+      const axisX = pad.axes[0] || 0;
+      return {
+        left: axisX < -0.25 || pad.buttons[14]?.pressed,
+        right: axisX > 0.25 || pad.buttons[15]?.pressed,
+        fire: pad.buttons[0]?.pressed || pad.buttons[1]?.pressed,
+        start: pad.buttons[9]?.pressed || pad.buttons[0]?.pressed
+      };
+    }
+
+    function update(dt) {
+      const pad = getGamepadInput();
+
+      for (const star of stars) {
+        star.y += star.speed * dt;
+        if (star.y > GAME_HEIGHT) {
+          star.y = 0;
+          star.x = Math.random() * GAME_WIDTH;
+        }
+      }
+
+      if (gameState === "title") {
+        if (keys.Enter || keys.Space || pad.start) resetGame();
+        return;
+      }
+
+      if (gameState === "gameover") {
+        if (keys.Enter || keys.Space || pad.start) resetGame();
+        return;
+      }
+
+      const moveLeft = keys.ArrowLeft || keys.KeyA || pad.left;
+      const moveRight = keys.ArrowRight || keys.KeyD || pad.right;
+      const fire = keys.Space || keys.Enter || pad.fire;
+
+      if (moveLeft) player.x -= player.speed * dt;
+      if (moveRight) player.x += player.speed * dt;
+      player.x = Math.max(20, Math.min(GAME_WIDTH - player.w - 20, player.x));
+
+      player.cooldown -= dt;
+      if (fire) shoot();
+
+      for (const b of bullets) b.y -= b.speed * dt;
+      bullets = bullets.filter(b => b.y + b.h > 0);
+
+      for (const b of enemyBullets) b.y += b.speed * dt;
+      enemyBullets = enemyBullets.filter(b => b.y < GAME_HEIGHT + 20);
+
+      enemyStepTimer += dt;
+      const enemySpeed = Math.max(0.12, 0.45 - level * 0.035);
+
+      if (enemyStepTimer >= enemySpeed) {
+        enemyStepTimer = 0;
+        let edgeHit = false;
+
+        for (const e of enemies) {
+          if (!e.alive) continue;
+          e.x += 14 * enemyDirection;
+          if (e.x < 30 || e.x + e.w > GAME_WIDTH - 30) edgeHit = true;
+        }
+
+        if (edgeHit) {
+          enemyDirection *= -1;
+          for (const e of enemies) {
+            if (e.alive) e.y += 20;
+          }
+        }
+      }
+
+      if (Math.random() < dt * (0.65 + level * 0.15)) enemyShoot();
+
+      for (const b of bullets) {
+        for (const e of enemies) {
+          if (e.alive && rectsOverlap(b, e)) {
+            e.alive = false;
+            b.y = -999;
+            score += 10 * level;
+            addExplosion(e.x + e.w / 2, e.y + e.h / 2, "#55ff99");
+          }
+        }
+      }
+
+      bullets = bullets.filter(b => b.y > -100);
+
+      for (const b of enemyBullets) {
+        if (rectsOverlap(b, player)) {
+          b.y = GAME_HEIGHT + 999;
+          lives--;
+          addExplosion(player.x + player.w / 2, player.y + player.h / 2, "#ff5577");
+          player.x = GAME_WIDTH / 2 - player.w / 2;
+          if (lives <= 0) {
+            highScore = Math.max(highScore, score);
+            localStorage.setItem("retroHighScore", String(highScore));
+            gameState = "gameover";
+          }
+        }
+      }
+
+      const anyEnemyAtBottom = enemies.some(e => e.alive && e.y + e.h >= player.y - 8);
+      if (anyEnemyAtBottom) {
+        highScore = Math.max(highScore, score);
+        localStorage.setItem("retroHighScore", String(highScore));
+        gameState = "gameover";
+      }
+
+      if (enemies.every(e => !e.alive)) nextLevel();
+
+      for (const p of particles) {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+      }
+      particles = particles.filter(p => p.life > 0);
+    }
+
+    function drawPixelText(text, x, y, size = 24, align = "left", color = "white") {
+      ctx.fillStyle = color;
+      ctx.font = `${size}px monospace`;
+      ctx.textAlign = align;
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, x, y);
+    }
+
+    function drawPlayer() {
+      ctx.fillStyle = "#44ddff";
+      ctx.fillRect(player.x, player.y + 8, player.w, 12);
+      ctx.fillRect(player.x + 10, player.y, player.w - 20, 12);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(player.x + player.w / 2 - 4, player.y - 5, 8, 8);
+    }
+
+    function drawEnemy(e) {
+      const colors = ["#55ff99", "#ffee55", "#ff77dd"];
+      ctx.fillStyle = colors[e.type];
+      ctx.fillRect(e.x + 4, e.y, e.w - 8, 6);
+      ctx.fillRect(e.x, e.y + 6, e.w, 12);
+      ctx.fillRect(e.x + 6, e.y + 18, 6, 6);
+      ctx.fillRect(e.x + e.w - 12, e.y + 18, 6, 6);
+      ctx.fillStyle = "#050510";
+      ctx.fillRect(e.x + 8, e.y + 9, 5, 5);
+      ctx.fillRect(e.x + e.w - 13, e.y + 9, 5, 5);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+      ctx.fillStyle = "#050510";
+      ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+
+      for (const star of stars) {
+        ctx.fillStyle = star.size === 2 ? "#ffffff" : "#8888ff";
+        ctx.fillRect(star.x, star.y, star.size, star.size);
+      }
+
+      ctx.strokeStyle = "rgba(80, 255, 180, 0.22)";
+      ctx.lineWidth = 2;
+      for (let y = 0; y < GAME_HEIGHT; y += 6) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(GAME_WIDTH, y);
+        ctx.stroke();
+      }
+
+      if (gameState === "title") {
+        drawPixelText("RETRO SPACE", GAME_WIDTH / 2, 155, 58, "center", "#55ff99");
+        drawPixelText("INVADERS TV", GAME_WIDTH / 2, 215, 46, "center", "#44ddff");
+        drawPixelText("PRESS ENTER / SPACE / GAMEPAD A", GAME_WIDTH / 2, 315, 24, "center", "#ffffff");
+        drawPixelText("MOVE: ARROWS OR GAMEPAD   FIRE: SPACE", GAME_WIDTH / 2, 365, 20, "center", "#ffdd66");
+        drawPixelText(`HIGH SCORE: ${highScore}`, GAME_WIDTH / 2, 420, 22, "center", "#ff77dd");
+        return;
+      }
+
+      for (const e of enemies) {
+        if (e.alive) drawEnemy(e);
+      }
+
+      drawPlayer();
+
+      ctx.fillStyle = "#ffffff";
+      for (const b of bullets) ctx.fillRect(b.x, b.y, b.w, b.h);
+
+      ctx.fillStyle = "#ff5577";
+      for (const b of enemyBullets) ctx.fillRect(b.x, b.y, b.w, b.h);
+
+      for (const p of particles) {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillRect(p.x, p.y, 4, 4);
+        ctx.globalAlpha = 1;
+      }
+
+      drawPixelText(`SCORE ${score}`, 28, 26, 22, "left", "#ffffff");
+      drawPixelText(`HIGH ${highScore}`, GAME_WIDTH / 2, 26, 22, "center", "#ffdd66");
+      drawPixelText(`LIVES ${lives}`, GAME_WIDTH - 28, 26, 22, "right", "#ffffff");
+      drawPixelText(`LEVEL ${level}`, GAME_WIDTH / 2, 505, 18, "center", "#55ff99");
+
+      if (gameState === "gameover") {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.72)";
+        ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+        drawPixelText("GAME OVER", GAME_WIDTH / 2, 210, 58, "center", "#ff5577");
+        drawPixelText(`SCORE: ${score}`, GAME_WIDTH / 2, 285, 28, "center", "#ffffff");
+        drawPixelText("PRESS ENTER / SPACE TO RESTART", GAME_WIDTH / 2, 355, 24, "center", "#55ff99");
+      }
+    }
+
+    let lastTime = performance.now();
+    function gameLoop(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.033);
+      lastTime = now;
+      update(dt);
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    createStars();
+    createEnemies();
+    requestAnimationFrame(gameLoop);
+  </script></body>
+  </html>
