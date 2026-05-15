@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Retro TV Arcade Mega Pack</title>
+<style>
+html,body{margin:0;padding:0;width:100%;height:100%;background:#050510;overflow:hidden;font-family:monospace;color:#fff}
+canvas{display:block;width:100vw;height:100vh;image-rendering:pixelated;background:#050510}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<script>
+const canvas=document.getElementById("game"),ctx=canvas.getContext("2d");
+const W=960,H=540;
+let keys={},just={};
+function resize(){canvas.width=innerWidth;canvas.height=innerHeight;ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0)}
+addEventListener("resize",resize);resize();
+addEventListener("keydown",e=>{if(!keys[e.code])just[e.code]=true;keys[e.code]=true;if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Space","Enter"].includes(e.code))e.preventDefault()});
+addEventListener("keyup",e=>keys[e.code]=false);
+function pad(){let p=navigator.getGamepads?navigator.getGamepads()[0]:null;if(!p)return{left:0,right:0,up:0,down:0,fire:0,start:0};return{left:(p.axes[0]||0)<-.25||p.buttons[14]?.pressed,right:(p.axes[0]||0)>.25||p.buttons[15]?.pressed,up:(p.axes[1]||0)<-.25||p.buttons[12]?.pressed,down:(p.axes[1]||0)>.25||p.buttons[13]?.pressed,fire:p.buttons[0]?.pressed||p.buttons[1]?.pressed,start:p.buttons[9]?.pressed||p.buttons[0]?.pressed}}
+function text(t,x,y,s=24,a="left",c="#fff"){ctx.fillStyle=c;ctx.font=s+"px monospace";ctx.textAlign=a;ctx.textBaseline="middle";ctx.fillText(t,x,y)}
+function hit(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function rr(a,b){return a+Math.random()*(b-a)}
+let stars=[];function makeStars(){stars=[];for(let i=0;i<100;i++)stars.push({x:rr(0,W),y:rr(0,H),s:Math.random()>.82?2:1,v:rr(12,55)})}
+function bg(dt){ctx.fillStyle="#050510";ctx.fillRect(0,0,W,H);for(const st of stars){st.y+=st.v*dt;if(st.y>H){st.y=0;st.x=rr(0,W)}ctx.fillStyle=st.s===2?"#fff":"#8888ff";ctx.fillRect(st.x,st.y,st.s,st.s)}ctx.strokeStyle="rgba(80,255,180,.12)";for(let y=0;y<H;y+=6){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke()}}
+function over(title,score){ctx.fillStyle="rgba(0,0,0,.78)";ctx.fillRect(0,0,W,H);text(title,W/2,205,54,"center",title.includes("WIN")?"#55ff99":"#ff5577");text("SCORE: "+score,W/2,292,28,"center");text("ENTER / SPACE RESTART  •  ESC MENU",W/2,365,24,"center","#55ff99")}
+function save(k,v){arc.high[k]=Math.max(arc.high[k],v);localStorage.setItem("high_"+k,arc.high[k])}
+const games=["SPACE INVADERS","SNAKE","PONG","BREAKOUT","ASTEROID DODGER","PAC-MAN MINI","PLATFORMER","ZELDA-LIKE","RPG BATTLE","TETRIS"];
+const keysHigh=["invaders","snake","pong","breakout","dodger","pacman","platformer","zelda","rpg","tetris"];
+const arc={state:"menu",sel:0,high:{}};keysHigh.forEach(k=>arc.high[k]=+localStorage.getItem("high_"+k)||0);
+function menu(dt,p){bg(dt);if(just.ArrowUp||just.KeyW||p.up)arc.sel=(arc.sel+games.length-1)%games.length;if(just.ArrowDown||just.KeyS||p.down)arc.sel=(arc.sel+1)%games.length;if(just.Enter||just.Space||p.fire||p.start)start();
+text("RETRO TV ARCADE MEGA PACK",W/2,48,42,"center","#55ff99");text("10 GAMES • ONE INDEX.HTML • TV READY",W/2,88,20,"center","#44ddff");
+for(let i=0;i<games.length;i++){let y=132+i*37,on=i===arc.sel;ctx.fillStyle=on?"rgba(85,255,153,.22)":"rgba(255,255,255,.045)";ctx.fillRect(250,y-18,460,31);text(on?"> "+games[i]+" <":games[i],W/2,y,22,"center",on?"#ffee55":"#fff")}
+text("UP/DOWN SELECT • ENTER/SPACE START • ESC MENU",W/2,515,18,"center","#ff77dd")}
+function start(){[invStart,snakeStart,pongStart,breakStart,dodgeStart,pacStart,platStart,zeldaStart,rpgStart,tetrisStart][arc.sel]()}
+
+/* Previous compact games */
+let inv={};function invStart(){inv={p:{x:W/2-22,y:H-70,w:44,h:24,spd:360,cd:0},bs:[],eb:[],es:[],score:0,lives:3,lvl:1,dir:1,t:0,dead:0};for(let r=0;r<5;r++)for(let c=0;c<10;c++)inv.es.push({x:145+c*66,y:80+r*42,w:34,h:24,a:1,type:r%3});arc.state="inv"}
+function invUpdate(dt,p){bg(dt);if(keys.Escape){arc.state="menu";return}if(inv.dead){if(just.Enter||just.Space||p.fire)invStart();drawInv();over("GAME OVER",inv.score);return}
+if(keys.ArrowLeft||keys.KeyA||p.left)inv.p.x-=inv.p.spd*dt;if(keys.ArrowRight||keys.KeyD||p.right)inv.p.x+=inv.p.spd*dt;inv.p.x=Math.max(20,Math.min(W-64,inv.p.x));inv.p.cd-=dt;if((keys.Space||keys.Enter||p.fire)&&inv.p.cd<=0){inv.bs.push({x:inv.p.x+19,y:inv.p.y-12,w:6,h:14,v:520});inv.p.cd=.28}
+inv.bs.forEach(b=>b.y-=b.v*dt);inv.bs=inv.bs.filter(b=>b.y>-20);inv.eb.forEach(b=>b.y+=b.v*dt);inv.eb=inv.eb.filter(b=>b.y<H+20);inv.t+=dt;if(inv.t>.32){inv.t=0;let edge=0;for(const e of inv.es)if(e.a){e.x+=14*inv.dir;if(e.x<30||e.x+e.w>W-30)edge=1}if(edge){inv.dir*=-1;for(const e of inv.es)if(e.a)e.y+=20}}if(Math.random()<dt*.9){let a=inv.es.filter(e=>e.a);if(a.length){let e=a[Math.floor(Math.random()*a.length)];inv.eb.push({x:e.x+14,y:e.y+e.h,w:6,h:14,v:210})}}
+for(const b of inv.bs)for(const e of inv.es)if(e.a&&hit(b,e)){e.a=0;b.y=-99;inv.score+=10}
+for(const b of inv.eb)if(hit(b,inv.p)){b.y=999;inv.lives--;if(inv.lives<=0){save("invaders",inv.score);inv.dead=1}}
+if(inv.es.every(e=>!e.a)){save("invaders",inv.score);invStart()}drawInv()}
+function drawInv(){for(const e of inv.es)if(e.a){ctx.fillStyle=["#55ff99","#ffee55","#ff77dd"][e.type];ctx.fillRect(e.x,e.y,e.w,e.h)}ctx.fillStyle="#44ddff";ctx.fillRect(inv.p.x,inv.p.y,44,24);ctx.fillStyle="#fff";inv.bs.forEach(b=>ctx.fillRect(b.x,b.y,b.w,b.h));ctx.fillStyle="#ff5577";inv.eb.forEach(b=>ctx.fillRect(b.x,b.y,b.w,b.h));text("INVADERS SCORE "+inv.score,28,28,22);text("LIVES "+inv.lives,W-28,28,22,"right")}
+
+let sn={};function snakeStart(){sn={g:24,c:18,ox:(W-432)/2,oy:70,b:[{x:12,y:12},{x:11,y:12}],d:{x:1,y:0},n:{x:1,y:0},f:{x:18,y:12},t:0,s:.13,score:0,dead:0};arc.state="snake"}function snakeFood(){sn.f={x:Math.floor(rr(0,sn.g)),y:Math.floor(rr(0,sn.g))}}
+function snakeUpdate(dt,p){bg(dt);if(keys.Escape){arc.state="menu";return}if(sn.dead){if(just.Enter||just.Space||p.fire)snakeStart();drawSnake();over("GAME OVER",sn.score);return}if((just.ArrowUp||just.KeyW||p.up)&&sn.d.y!==1)sn.n={x:0,y:-1};if((just.ArrowDown||just.KeyS||p.down)&&sn.d.y!==-1)sn.n={x:0,y:1};if((just.ArrowLeft||just.KeyA||p.left)&&sn.d.x!==1)sn.n={x:-1,y:0};if((just.ArrowRight||just.KeyD||p.right)&&sn.d.x!==-1)sn.n={x:1,y:0};sn.t+=dt;if(sn.t>sn.s){sn.t=0;sn.d=sn.n;let h=sn.b[0],n={x:h.x+sn.d.x,y:h.y+sn.d.y};if(n.x<0||n.x>=sn.g||n.y<0||n.y>=sn.g||sn.b.some(s=>s.x===n.x&&s.y===n.y)){save("snake",sn.score);sn.dead=1}else{sn.b.unshift(n);if(n.x===sn.f.x&&n.y===sn.f.y){sn.score+=10;snakeFood()}else sn.b.pop()}}drawSnake()}
+function drawSnake(){text("SNAKE SCORE "+sn.score,W/2,35,26,"center","#55ff99");ctx.strokeStyle="#44ddff";ctx.strokeRect(sn.ox-4,sn.oy-4,440,440);ctx.fillStyle="#ff5577";ctx.fillRect(sn.ox+sn.f.x*18+2,sn.oy+sn.f.y*18+2,14,14);sn.b.forEach((s,i)=>{ctx.fillStyle=i?"#55ff99":"#ffee55";ctx.fillRect(sn.ox+s.x*18+2,sn.oy+s.y*18+2,14,14)})}
+
+let po={};function pongStart(){po={pl:{x:40,y:H/2-55,w:18,h:110,spd:360},ai:{x:W-58,y:H/2-55,w:18,h:110,spd:300},b:{x:W/2,y:H/2,vx:310,vy:180,s:14},ps:0,as:0,dead:0};arc.state="pong"}function rb(d){po.b={x:W/2,y:H/2,vx:310*d,vy:rr(150,230)*(Math.random()>.5?1:-1),s:14}}
+function pongUpdate(dt,p){bg(dt);if(keys.Escape){arc.state="menu";return}if(po.dead){if(just.Enter||just.Space||p.fire)pongStart();drawPong();over(po.ps>po.as?"YOU WIN!":"GAME OVER",po.ps);return}if(keys.ArrowUp||keys.KeyW||p.up)po.pl.y-=po.pl.spd*dt;if(keys.ArrowDown||keys.KeyS||p.down)po.pl.y+=po.pl.spd*dt;po.pl.y=Math.max(20,Math.min(H-130,po.pl.y));let c=po.ai.y+55;if(c<po.b.y)po.ai.y+=po.ai.spd*dt;if(c>po.b.y)po.ai.y-=po.ai.spd*dt;po.b.x+=po.b.vx*dt;po.b.y+=po.b.vy*dt;if(po.b.y<20||po.b.y>H-30)po.b.vy*=-1;let br={x:po.b.x,y:po.b.y,w:14,h:14};if(hit(br,po.pl)&&po.b.vx<0)po.b.vx*=-1.08;if(hit(br,po.ai)&&po.b.vx>0)po.b.vx*=-1.08;if(po.b.x<-30){po.as++;rb(1)}if(po.b.x>W+30){po.ps++;save("pong",po.ps);rb(-1)}if(po.ps>=7||po.as>=7)po.dead=1;drawPong()}
+function drawPong(){ctx.fillStyle="#55ff99";ctx.fillRect(po.pl.x,po.pl.y,po.pl.w,po.pl.h);ctx.fillStyle="#ff5577";ctx.fillRect(po.ai.x,po.ai.y,po.ai.w,po.ai.h);ctx.fillStyle="#ffee55";ctx.fillRect(po.b.x,po.b.y,14,14);text(po.ps,W/2-85,70,58,"center");text(po.as,W/2+85,70,58,"center")}
+
+let br={};function breakStart(){br={p:{x:W/2-65,y:H-55,w:130,h:18,spd:430},b:{x:W/2,y:H-90,vx:260,vy:-280,s:14},blocks:[],score:0,lives:3,dead:0,win:0};for(let r=0;r<6;r++)for(let c=0;c<12;c++)br.blocks.push({x:82+c*66,y:75+r*30,w:54,h:20,a:1,c:r});arc.state="break"}
+function breakUpdate(dt,p){bg(dt);if(keys.Escape){arc.state="menu";return}if(br.dead){if(just.Enter||just.Space||p.fire)breakStart();drawBreak();over(br.win?"YOU WIN!":"GAME OVER",br.score);return}if(keys.ArrowLeft||keys.KeyA||p.left)br.p.x-=br.p.spd*dt;if(keys.ArrowRight||keys.KeyD||p.right)br.p.x+=br.p.spd*dt;br.p.x=Math.max(20,Math.min(W-br.p.w-20,br.p.x));br.b.x+=br.b.vx*dt;br.b.y+=br.b.vy*dt;if(br.b.x<20||br.b.x>W-30)br.b.vx*=-1;if(br.b.y<20)br.b.vy*=-1;if(hit({x:br.b.x,y:br.b.y,w:14,h:14},br.p)&&br.b.vy>0)br.b.vy*=-1;for(const bl of br.blocks)if(bl.a&&hit({x:br.b.x,y:br.b.y,w:14,h:14},bl)){bl.a=0;br.b.vy*=-1;br.score+=10}if(br.b.y>H){br.lives--;br.b={x:W/2,y:H-90,vx:260,vy:-280,s:14};if(br.lives<=0){save("breakout",br.score);br.dead=1}}if(br.blocks.every(b=>!b.a)){save("breakout",br.score);br.win=1;br.dead=1}drawBreak()}
+function drawBreak(){let cs=["#55ff99","#44ddff","#ffee55","#ff77dd","#ffaa44","#aa88ff"];br.blocks.forEach(b=>{if(b.a){ctx.fillStyle=cs[b.c];ctx.fillRect(b.x,b.y,b.w,b.h)}});ctx.fillStyle="#55ff99";ctx.fillRect(br.p.x,br.p.y,br.p.w,br.p.h);ctx.fillStyle="#ffee55";ctx.fillRect(br.b.x,br.b.y,14,14);text("BREAKOUT SCORE "+br.score,28,28,22);text("LIVES "+br.lives,W-28,28,22,"right")}
+
+let dd={};function dodgeStart(){dd={p:{x:W/2-20,y:H-70,w:40,h:30,spd:390},r:[],score:0,t:0,sp:0,dead:0};arc.state="dodge"}
+function dodgeUpdate(dt,p){bg(dt);if(keys.Escape){arc.state="menu";return}if(dd.dead){if(just.Enter||just.Space||p.fire)dodgeStart();drawDodge();over("GAME OVER",dd.score);return}if(keys.ArrowLeft||keys.KeyA||p.left)dd.p.x-=dd.p.spd*dt;if(keys.ArrowRight||keys.KeyD||p.right)dd.p.x+=dd.p.spd*dt;dd.p.x=Math.max(20,Math.min(W-60,dd.p.x));dd.t+=dt;dd.score=Math.floor(dd.t*10);dd.sp-=dt;if(dd.sp<=0){dd.sp=Math.max(.18,.65-dd.t*.012);let s=rr(18,44);dd.r.push({x:rr(30,W-70),y:-50,w:s,h:s,vy:rr(130,230)+dd.t*5})}for(const r of dd.r){r.y+=r.vy*dt;if(hit(r,dd.p)){save("dodger",dd.score);dd.dead=1}}dd.r=dd.r.filter(r=>r.y<H+60);drawDodge()}
+function drawDodge(){ctx.fillStyle="#44ddff";ctx.fillRect(dd.p.x,dd.p.y,40,30);for(const r of dd.r){ctx.fillStyle="#ffaa44";ctx.fillRect(r.x,r.y,r.w,r.h)}text("ASTEROID DODGER SCORE "+dd.score,28,28,22)}
+
+/* NEW GAMES */
+let pac={};function pacStart(){pac={g:19,c:22,ox:271,oy:58,p:{x:1,y:1},dir:{x:0,y:0},ghosts:[{x:17,y:17},{x:17,y:1}],dots:new Set(),score:0,dead:0};for(let y=0;y<19;y++)for(let x=0;x<19;x++)if(!wall(x,y))pac.dots.add(x+","+y);pac.dots.delete("1,1");arc.state="pac"}
+function wall(x,y){return x<0||y<0||x>=19||y>=19||x===0||y===0||x===18||y===18||(x%4===0&&y>2&&y<16)||(y%5===0&&x>2&&x<16)}
+function pacUpdate(dt,p){bg(dt);if(keys.Escape){arc.state="menu";return}if(pac.dead){if(just.Enter||just.Space||p.fire)pacStart();drawPac();over("GAME OVER",pac.score);return}let d=null;if(just.ArrowUp||just.KeyW||p.up)d={x:0,y:-1};if(just.ArrowDown||just.KeyS||p.down)d={x:0,y:1};if(just.ArrowLeft||just.KeyA||p.left)d={x:-1,y:0};if(just.ArrowRight||just.KeyD||p.right)d={x:1,y:0};if(d&&!wall(pac.p.x+d.x,pac.p.y+d.y))pac.p={x:pac.p.x+d.x,y:pac.p.y+d.y};let k=pac.p.x+","+pac.p.y;if(pac.dots.has(k)){pac.dots.delete(k);pac.score+=10}for(const g of pac.ghosts){let opts=[[1,0],[-1,0],[0,1],[0,-1]].filter(o=>!wall(g.x+o[0],g.y+o[1]));opts.sort((a,b)=>Math.hypot(g.x+a[0]-pac.p.x,g.y+a[1]-pac.p.y)-Math.hypot(g.x+b[0]-pac.p.x,g.y+b[1]-pac.p.y));let o=Math.random()<.65?opts[0]:opts[Math.floor(Math.random()*opts.length)];g.x+=o[0];g.y+=o[1];if(g.x===pac.p.x&&g.y===pac.p.y){save("pacman",pac.score);pac.dead=1}}if(pac.dots.size===0){save("pacman",pac.score);pac.dead=1}drawPac()}
+function drawPac(){ctx.fillStyle="#111144";ctx.fillRect(pac.ox-8,pac.oy-8,19*22+16,19*22+16);for(let y=0;y<19;y++)for(let x=0;x<19;x++){if(wall(x,y)){ctx.fillStyle="#2244ff";ctx.fillRect(pac.ox+x*22,pac.oy+y*22,20,20)}else if(pac.dots.has(x+","+y)){ctx.fillStyle="#ffee55";ctx.fillRect(pac.ox+x*22+8,pac.oy+y*22+8,5,5)}}ctx.fillStyle="#ffdd33";ctx.beginPath();ctx.arc(pac.ox+pac.p.x*22+11,pac.oy+pac.p.y*22+11,10,0,Math.PI*2);ctx.fill();for(const g of pac.ghosts){ctx.fillStyle="#ff5577";ctx.fillRect(pac.ox+g.x*22+2,pac.oy+g.y*22+2,18,18)}text("PAC-MAN MINI SCORE "+pac.score,28,28,22)}
+
+let pl={};function platStart(){pl={p:{x:50,y:430,w:26,h:34,vx:0,vy:0,on:0},cam:0,score:0,dead:0,goal:1600,coins:[]};for(let i=0;i<22;i++)pl.coins.push({x:140+i*65,y:330-((i%3)*45),a:1});arc.state="plat"}
+function groundY(x){return x%320>220?470:430}
+function platUpdate(dt,p){bg(dt);if(keys.Escape){arc.state="menu";return}if(pl.dead){if(just.Enter||just.Space||p.fire)platStart();drawPlat();over(pl.score>=200?"YOU WIN!":"GAME OVER",pl.score);return}let left=keys.ArrowLeft||keys.KeyA||p.left,right=keys.ArrowRight||keys.KeyD||p.right,jump=just.Space||just.ArrowUp||just.KeyW||p.fire||p.up;pl.p.vx=(right-left)*240;if(jump&&pl.p.on){pl.p.vy=-430;pl.p.on=0}pl.p.vy+=900*dt;pl.p.x+=pl.p.vx*dt;pl.p.y+=pl.p.vy*dt;let gy=groundY(pl.p.x)+0;if(pl.p.y+pl.p.h>gy){pl.p.y=gy-pl.p.h;pl.p.vy=0;pl.p.on=1}for(const c of pl.coins)if(c.a&&hit(pl.p,{x:c.x,y:c.y,w:18,h:18})){c.a=0;pl.score+=10}if(pl.p.x>pl.goal){save("platformer",pl.score);pl.dead=1}pl.cam=Math.max(0,pl.p.x-240);drawPlat()}
+function drawPlat(){ctx.save();ctx.translate(-pl.cam,0);for(let x=0;x<1900;x+=40){ctx.fillStyle="#664422";ctx.fillRect(x,groundY(x),40,H-groundY(x));ctx.fillStyle="#55ff99";ctx.fillRect(x,groundY(x),40,8)}for(const c of pl.coins)if(c.a){ctx.fillStyle="#ffee55";ctx.fillRect(c.x,c.y,18,18)}ctx.fillStyle="#44ddff";ctx.fillRect(pl.p.x,pl.p.y,pl.p.w,pl.p.h);ctx.fillStyle="#ff77dd";ctx.fillRect(pl.goal,360,18,70);ctx.restore();text("PLATFORMER SCORE "+pl.score,28,28,22);text("MOVE + JUMP TO REACH FLAG",W/2,510,18,"center")}
+
+let ze={};function zeldaStart(){ze={p:{x:80,y:80,w:28,h:28,spd:220},en:[],score:0,hp:5,dead:0,cd:0};for(let i=0;i<8;i++)ze.en.push({x:rr(180,850),y:rr(90,440),w:28,h:28,hp:2});arc.state="zelda"}
+function zeldaUpdate(dt,p){bg(dt);if(keys.Escape){arc.state="menu";return}if(ze.dead){if(just.Enter||just.Space||p.fire)zeldaStart();drawZelda();over(ze.hp>0?"YOU WIN!":"GAME OVER",ze.score);return}if(keys.ArrowLeft||keys.KeyA||p.left)ze.p.x-=ze.p.spd*dt;if(keys.ArrowRight||keys.KeyD||p.right)ze.p.x+=ze.p.spd*dt;if(keys.ArrowUp||keys.KeyW||p.up)ze.p.y-=ze.p.spd*dt;if(keys.ArrowDown||keys.KeyS||p.down)ze.p.y+=ze.p.spd*dt;ze.p.x=Math.max(30,Math.min(W-58,ze.p.x));ze.p.y=Math.max(60,Math.min(H-58,ze.p.y));ze.cd-=dt;let atk=(just.Space||just.Enter||p.fire)&&ze.cd<=0;if(atk)ze.cd=.35;for(const e of ze.en){if(e.hp<=0)continue;let dx=ze.p.x-e.x,dy=ze.p.y-e.y,d=Math.hypot(dx,dy)||1;e.x+=dx/d*70*dt;e.y+=dy/d*70*dt;if(hit(ze.p,e)){ze.hp-=dt*.9;if(ze.hp<=0){save("zelda",ze.score);ze.dead=1}}if(atk&&Math.hypot(dx,dy)<55){e.hp--;if(e.hp<=0){ze.score+=25}}}if(ze.en.every(e=>e.hp<=0)){save("zelda",ze.score);ze.dead=1}drawZelda()}
+function drawZelda(){ctx.fillStyle="#123d1b";ctx.fillRect(35,60,890,430);ctx.strokeStyle="#55ff99";ctx.strokeRect(35,60,890,430);ctx.fillStyle="#44ddff";ctx.fillRect(ze.p.x,ze.p.y,28,28);if(ze.cd>.18){ctx.strokeStyle="#ffee55";ctx.strokeRect(ze.p.x-18,ze.p.y-18,64,64)}for(const e of ze.en)if(e.hp>0){ctx.fillStyle="#ff5577";ctx.fillRect(e.x,e.y,28,28)}text("ZELDA-LIKE HP "+Math.ceil(ze.hp)+" SCORE "+ze.score,28,28,22);text("ARROWS MOVE • SPACE SWORD",W/2,515,18,"center")}
+
+let rp={};function rpgStart(){rp={hero:30,enemy:35,score:0,msg:"A WILD SLIME APPEARS!",dead:0};arc.state="rpg"}
+function rpgUpdate(dt,p){bg(dt);if(keys.Escape){arc.state="menu";return}if(rp.dead){if(just.Enter||just.Space||p.fire)rpgStart();drawRpg();over(rp.hero>0?"YOU WIN!":"GAME OVER",rp.score);return}if(just.Space||just.Enter||p.fire){let dmg=Math.floor(rr(5,12));rp.enemy-=dmg;rp.msg="HERO ATTACKS FOR "+dmg;if(rp.enemy<=0){rp.score=100+rp.hero;save("rpg",rp.score);rp.dead=1}else{let ed=Math.floor(rr(3,9));rp.hero-=ed;rp.msg+=" • SLIME HITS "+ed;if(rp.hero<=0){save("rpg",rp.score);rp.dead=1}}}drawRpg()}
+function drawRpg(){ctx.fillStyle="#111144";ctx.fillRect(100,80,760,350);ctx.strokeStyle="#55ff99";ctx.strokeRect(100,80,760,350);ctx.fillStyle="#44ddff";ctx.fillRect(220,230,80,110);ctx.fillStyle="#55ff99";ctx.fillRect(650,250,90,70);text("RPG BATTLE",W/2,110,36,"center","#ffee55");text("HERO HP: "+Math.max(0,rp.hero),170,400,24);text("SLIME HP: "+Math.max(0,rp.enemy),610,400,24);text(rp.msg,W/2,465,20,"center");text("PRESS SPACE / ENTER TO ATTACK",W/2,510,18,"center","#55ff99")}
+
+let tet={};const shapes=[[[1,1,1,1]],[[1,1],[1,1]],[[0,1,0],[1,1,1]],[[1,0,0],[1,1,1]],[[0,0,1],[1,1,1]],[[1,1,0],[0,1,1]],[[0,1,1],[1,1,0]]];
+function tetrisStart(){tet={w:10,h:20,c:22,ox:365,oy:50,grid:Array.from({length:20},()=>Array(10).fill(0)),piece:null,x:3,y:0,t:0,score:0,dead:0};newPiece();arc.state="tetris"}
+function newPiece(){tet.piece=JSON.parse(JSON.stringify(shapes[Math.floor(Math.random()*shapes.length)]));tet.x=3;tet.y=0;if(collide(tet.x,tet.y,tet.piece)){save("tetris",tet.score);tet.dead=1}}
+function collide(px,py,pc){for(let y=0;y<pc.length;y++)for(let x=0;x<pc[y].length;x++)if(pc[y][x]){let gx=px+x,gy=py+y;if(gx<0||gx>=tet.w||gy>=tet.h||(gy>=0&&tet.grid[gy][gx]))return 1}return 0}
+function merge(){for(let y=0;y<tet.piece.length;y++)for(let x=0;x<tet.piece[y].length;x++)if(tet.piece[y][x]&&tet.y+y>=0)tet.grid[tet.y+y][tet.x+x]=1;let lines=0;tet.grid=tet.grid.filter(r=>{if(r.every(v=>v)){lines++;return false}return true});while(tet.grid.length<20)tet.grid.unshift(Array(10).fill(0));tet.score+=lines*100;newPiece()}
+function rot(m){let r=m[0].map((_,i)=>m.map(row=>row[i]).reverse());return r}
+function tetrisUpdate(dt,p){bg(dt);if(keys.Escape){arc.state="menu";return}if(tet.dead){if(just.Enter||just.Space||p.fire)tetrisStart();drawTetris();over("GAME OVER",tet.score);return}if(just.ArrowLeft||just.KeyA||p.left){if(!collide(tet.x-1,tet.y,tet.piece))tet.x--}if(just.ArrowRight||just.KeyD||p.right){if(!collide(tet.x+1,tet.y,tet.piece))tet.x++}if(just.ArrowUp||just.KeyW||p.up||just.Space||p.fire){let r=rot(tet.piece);if(!collide(tet.x,tet.y,r))tet.piece=r}tet.t+=dt*(keys.ArrowDown||p.down?8:1);if(tet.t>.55){tet.t=0;if(!collide(tet.x,tet.y+1,tet.piece))tet.y++;else merge()}drawTetris()}
+function drawTetris(){ctx.strokeStyle="#44ddff";ctx.strokeRect(tet.ox-4,tet.oy-4,228,448);for(let y=0;y<20;y++)for(let x=0;x<10;x++)if(tet.grid[y][x]){ctx.fillStyle="#55ff99";ctx.fillRect(tet.ox+x*22,tet.oy+y*22,20,20)}ctx.fillStyle="#ffee55";for(let y=0;y<tet.piece.length;y++)for(let x=0;x<tet.piece[y].length;x++)if(tet.piece[y][x])ctx.fillRect(tet.ox+(tet.x+x)*22,tet.oy+(tet.y+y)*22,20,20);text("TETRIS SCORE "+tet.score,28,28,22);text("LEFT/RIGHT MOVE • UP/SPACE ROTATE • DOWN DROP",W/2,515,18,"center")}
+
+let last=performance.now();function loop(now){let dt=Math.min((now-last)/1000,.033);last=now;let p=pad();
+if(arc.state==="menu")menu(dt,p);if(arc.state==="inv")invUpdate(dt,p);if(arc.state==="snake")snakeUpdate(dt,p);if(arc.state==="pong")pongUpdate(dt,p);if(arc.state==="break")breakUpdate(dt,p);if(arc.state==="dodge")dodgeUpdate(dt,p);
+if(arc.state==="pac")pacUpdate(dt,p);if(arc.state==="plat")platUpdate(dt,p);if(arc.state==="zelda")zeldaUpdate(dt,p);if(arc.state==="rpg")rpgUpdate(dt,p);if(arc.state==="tetris")tetrisUpdate(dt,p);
+just={};requestAnimationFrame(loop)}
+makeStars();requestAnimationFrame(loop);
+</script>
+</body>
+</html>
